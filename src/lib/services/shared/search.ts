@@ -9,12 +9,11 @@ export interface SearchResult {
 export interface SearchOptions {
 	maxResults?: number;
 	minSimilarity?: number;
-	useIndexFirst?: boolean; // Whether to try index search first (default: true)
 }
 
 /**
- * Enhanced course search that first tries index search, then falls back to full search
- * This is the new recommended search function
+ * Enhanced course search that uses similarity scoring with indexed data
+ * This provides proper relevance ranking instead of alphabetical ordering
  */
 export async function searchCoursesNew(
 	query: string,
@@ -22,33 +21,26 @@ export async function searchCoursesNew(
 ): Promise<Course[]> {
 	const { 
 		maxResults = 20, 
-		useIndexFirst = true 
+		minSimilarity = 50
 	} = options;
 	
 	if (!query.trim()) return [];
 	
 	try {
-		if (useIndexFirst) {
-			// First try fast index search
-			const indexResults = await searchCourseIndex(query);
-			
-
-			
-			// Convert index results to full course objects
-			const courses: Course[] = [];
-			for (const indexResult of indexResults.slice(0, maxResults)) {
-				const course = await getCourseById(indexResult.id);
-				if (course) {
-					courses.push(course);
-				}
+		// Get all potential matches from the index first (this is fast and cached)
+		const indexResults = await searchCourseIndex(query);
+		
+		// Convert index results to full course objects
+		const courses: Course[] = [];
+		for (const indexResult of indexResults) {
+			const course = await getCourseById(indexResult.id);
+			if (course) {
+				courses.push(course);
 			}
-			return courses;
 		}
 		
-		// If not using index first, fall back to original search logic
-		// This requires loading all courses first, which is less efficient
-		console.warn('searchCoursesNew called with useIndexFirst=false - consider using the index search for better performance');
-		return [];
+		// Now apply proper similarity scoring and ranking using legacy logic
+		return searchCourses(courses, query, { maxResults, minSimilarity });
 		
 	} catch (error) {
 		console.error('Enhanced course search failed:', error);
@@ -157,9 +149,8 @@ function calculateSimilarity(query: string, course: Course): number {
 }
 
 /**
- * LEGACY: Search courses with fuzzy matching and intelligent scoring
- * This function requires pre-loaded Course arrays and is less efficient
- * For new code, use searchCoursesNew() instead
+ * Search courses with fuzzy matching and intelligent scoring
+ * This is now the primary search function used by searchCoursesNew()
  */
 export function searchCourses(
 	courses: Course[], 
@@ -177,38 +168,17 @@ export function searchCourses(
 
 	const normalizedQuery = query.toLowerCase().trim();
 	
+	// Get all courses with similarity scores
+	const scoredCourses = courses
+		.map(course => ({
+			course,
+			similarity: calculateSimilarity(normalizedQuery, course)
+		}))
+		.filter(item => item.similarity > minSimilarity) // Only include reasonable matches
+		.sort((a, b) => b.similarity - a.similarity) // Sort by similarity descending
+		.slice(0, maxResults) // Take top results
+		.map(item => item.course);
 	
-	// First, get exact and substring matches
-	const exactMatches = courses.filter(course => 
-		course.id.toLowerCase().includes(normalizedQuery) || 
-		course.title.toLowerCase().includes(normalizedQuery)
-	);
-	
-	
-	// If we have fewer than maxResults exact matches, add fuzzy matches
-	if (exactMatches.length < maxResults) {
-		// Get all courses with similarity scores
-		const scoredCourses = courses
-			.filter(course => !exactMatches.some(exact => exact.id === course.id)) // Exclude already matched
-			.map(course => ({
-				course,
-				similarity: calculateSimilarity(normalizedQuery, course)
-			}))
-			.filter(item => {
-				return item.similarity > minSimilarity;
-			}) // Only include reasonable matches
-			.sort((a, b) => b.similarity - a.similarity) // Sort by similarity descending
-			.slice(0, maxResults - exactMatches.length) // Fill up to maxResults total results
-			.map(item => item.course);
-		
-		
-		const results = [...exactMatches, ...scoredCourses].slice(0, maxResults);
-		
-		return results;
-	} else {
-		const results = exactMatches.slice(0, maxResults);
-		
-		return results;
-	}
+	return scoredCourses;
 }
 
