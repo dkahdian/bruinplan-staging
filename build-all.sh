@@ -4,11 +4,12 @@ set -e
 
 MAX_BATCHES=${MAX_BATCHES:-148}  # Total batches calculated from ~14,783 courses ÷ 100
 SKIP_COURSES=${SKIP_COURSES:-false}
-BUILD_TIMEOUT=${BUILD_TIMEOUT:-300}  # 5 minutes per batch
+BUILD_TIMEOUT=${BUILD_TIMEOUT:-600}  # 10 minutes per batch (increased for safety)
 
 echo "BruinPlan Build Script Starting..."
 echo "Total Course Batches: $MAX_BATCHES"
 echo "Build Timeout per batch: ${BUILD_TIMEOUT}s"
+echo "Current environment: $(uname -a)"
 
 # Create temporary storage for course files
 TEMP_COURSES_DIR="temp_courses"
@@ -79,9 +80,9 @@ if [ "$SKIP_COURSES" != "true" ]; then
         echo "Progress: $percent% ($batch_description)"
         
         if build_batch $batch "$batch_description" "$TEMP_COURSES_DIR"; then
-            ((successful_batches++))
+            successful_batches=$((successful_batches + 1))
         else
-            ((failed_batches++))
+            failed_batches=$((failed_batches + 1))
             echo "WARNING: Batch $batch failed, but continuing with remaining batches..."
         fi
         
@@ -122,8 +123,12 @@ if [ "$SKIP_COURSES" != "true" ]; then
     echo "Course Batch Summary:"
     echo "   Successful: $successful_batches"
     echo "   Failed: $failed_batches"
-    success_rate=$((successful_batches * 100 / MAX_BATCHES))
-    echo "   Success Rate: ${success_rate}%"
+    
+    # Avoid division by zero
+    if [ "$MAX_BATCHES" -gt 0 ]; then
+        success_rate=$((successful_batches * 100 / MAX_BATCHES))
+        echo "   Success Rate: ${success_rate}%"
+    fi
     
     # Final build statistics
     total_course_html=$(find build/courses/ -name "*.html" 2>/dev/null | wc -l || echo "0")
