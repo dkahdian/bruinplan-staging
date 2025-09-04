@@ -20,11 +20,15 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: build
+      - name: Make build script executable
+        run: chmod +x build-all.sh
+
+      - name: Build with batch processing
         env:
           BASE_PATH: ""
+          NODE_OPTIONS: "--max-old-space-size=8192"  # Increase memory limit
         run: |
-          npm run build
+          ./build-all.sh
           cp build/404.html build/index.html
 
       - name: Upload Artifacts
