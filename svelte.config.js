@@ -15,6 +15,17 @@ export default {
     }),
     paths: {
       base: process.env.BASE_PATH || ""
+    },
+    prerender: {
+      handleHttpError: ({ path, referrer, message }) => {
+        // Log prerender errors but don't fail the build
+        console.warn(`Prerender error for ${path}:`, message);
+        if (referrer) console.warn(`Referrer: ${referrer}`);
+      },
+      handleMissingId: ({ path, id, message }) => {
+        // Log missing ID errors but don't fail the build
+        console.warn(`Missing ID error for ${path}:`, message);
+      }
     }
   }
 };

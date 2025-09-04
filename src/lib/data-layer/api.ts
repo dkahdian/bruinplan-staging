@@ -16,7 +16,8 @@ export async function getCourseIndex(fetchFn?: typeof globalThis.fetch): Promise
 	if (courseIndex !== null) return courseIndex;
 	
 	const fetchToUse = fetchFn || fetch;
-	const baseUrl = browser ? base : 'http://localhost:5173';
+	// During prerendering, use file:// URLs to access static files
+	const baseUrl = browser ? base : '';
 	const response = await fetchToUse(`${baseUrl}/course_index.json`);
 	if (!response.ok) throw new Error(`Failed to load course index: ${response.status}`);
 	courseIndex = await response.json();
@@ -42,7 +43,8 @@ export async function getMajorIndex(fetchFn?: typeof globalThis.fetch): Promise<
 	if (majorIndex !== null) return majorIndex;
 	
 	const fetchToUse = fetchFn || fetch;
-	const baseUrl = browser ? base : 'http://localhost:5173';
+	// During prerendering, use file:// URLs to access static files
+	const baseUrl = browser ? base : '';
 	const response = await fetchToUse(`${baseUrl}/major_index.json`);
 	if (!response.ok) throw new Error(`Failed to load major index: ${response.status}`);
 	majorIndex = await response.json();
@@ -69,8 +71,8 @@ export async function getSubjectCourses(subjectCode: string, fetchFn?: typeof gl
 	// Don't URL encode the filename for static file serving
 	// The Vite dev server expects the actual filename, not URL-encoded
 	
-	// Use absolute URL when not in browser (SSR context)
-	const baseUrl = browser ? base : 'http://localhost:5173';
+	// During prerendering, use file:// URLs to access static files
+	const baseUrl = browser ? base : '';
 	const url = `${baseUrl}/courses/${subjectCode}.json`;
 	const response = await fetchToUse(url);
 	
@@ -107,7 +109,8 @@ export async function getMajorByName(majorName: string, fetchFn?: typeof globalT
 	const fetchToUse = fetchFn || fetch;
 	// URL encode the major name to handle spaces and special characters
 	const encodedMajorName = encodeURIComponent(majorName);
-	const baseUrl = browser ? base : 'http://localhost:5173';
+	// During prerendering, use file:// URLs to access static files
+	const baseUrl = browser ? base : '';
 	const response = await fetchToUse(`${baseUrl}/majors/${encodedMajorName}.json`);
 	
 	if (!response.ok) {
@@ -123,7 +126,10 @@ export async function getMajorByName(majorName: string, fetchFn?: typeof globalT
 }
 
 export function majorNameToId(majorName: string): string {
-	return majorName.replace(/\s+/g, '').toLowerCase();
+	return majorName
+		.replace(/[^a-zA-Z0-9\s]/g, '') // Remove special characters like commas, periods, etc.
+		.replace(/\s+/g, '') // Remove spaces
+		.toLowerCase();
 }
 
 export function majorIdToDisplayName(majorId: string): string {

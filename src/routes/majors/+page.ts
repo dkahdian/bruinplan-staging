@@ -1,6 +1,9 @@
 import { getMajorsList } from '../../lib/data-layer/api.js';
 import { error } from '@sveltejs/kit';
 
+// Enable prerendering for the majors list page
+export const prerender = true;
+
 export const load = async ({ fetch }: { fetch: typeof globalThis.fetch }) => {
 	try {
 		const majors = await getMajorsList(fetch);

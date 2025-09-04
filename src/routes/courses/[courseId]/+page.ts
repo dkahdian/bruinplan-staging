@@ -1,6 +1,9 @@
 import { getCourseIndex, getCourseById } from '../../../lib/data-layer/api.js';
 import { error } from '@sveltejs/kit';
 
+// Disable prerendering for course pages (they load dynamically)
+export const prerender = false;
+
 export const load = async ({ params, fetch, url }: { 
   params: { courseId: string }, 
   fetch: typeof globalThis.fetch, 
