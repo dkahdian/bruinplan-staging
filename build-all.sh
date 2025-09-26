@@ -13,10 +13,17 @@ echo "Current environment: $(uname -a)"
 
 # Create temporary storage for course files
 TEMP_COURSES_DIR="temp_courses"
+TEMP_ASSETS_DIR="temp_assets"
 if [ -d "$TEMP_COURSES_DIR" ]; then
     rm -rf "$TEMP_COURSES_DIR"
 fi
 mkdir -p "$TEMP_COURSES_DIR"
+
+# Temporary storage for client assets (_app) from each batch build to avoid hash mismatches
+if [ -d "$TEMP_ASSETS_DIR" ]; then
+    rm -rf "$TEMP_ASSETS_DIR"
+fi
+mkdir -p "$TEMP_ASSETS_DIR/_app"
 
 # Function to run build with error handling, timeout, and course preservation
 build_batch() {
@@ -47,6 +54,13 @@ build_batch() {
                     fi
                 done 2>/dev/null || true
             fi
+        fi
+
+        # For course batches, also preserve the built client assets so referenced hashes exist later
+        if [ "$batch_number" -ge 0 ] 2>/dev/null && [ -d "build/_app" ]; then
+            # Merge current _app assets into temp storage (keep all unique hashed files)
+            # Use -r to copy recursively; allow overwrites here in temp as files are content-addressed
+            cp -r build/_app/* "$TEMP_ASSETS_DIR/_app/" 2>/dev/null || true
         fi
         
         local end_time=$(date +%s)
@@ -118,6 +132,19 @@ if [ "$SKIP_COURSES" != "true" ]; then
         
         # Clean up temp directory
         rm -rf "$TEMP_COURSES_DIR"
+    fi
+
+    # Merge preserved client assets from batches to avoid missing hashed files referenced by course HTML
+    if [ -d "$TEMP_ASSETS_DIR/_app" ]; then
+        echo "Merging preserved client assets from batches into final build..."
+        # Ensure target _app exists
+        mkdir -p "build/_app"
+        # Copy without overwriting final build's files for safety
+        # GNU cp supports -n to not overwrite existing files
+        cp -rn "$TEMP_ASSETS_DIR/_app/"* "build/_app/" 2>/dev/null || true
+        echo "Client assets merged."
+        # Clean up preserved assets
+        rm -rf "$TEMP_ASSETS_DIR"
     fi
     
     echo "Course Batch Summary:"
