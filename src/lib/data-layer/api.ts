@@ -16,9 +16,22 @@ export async function getCourseIndex(fetchFn?: typeof globalThis.fetch): Promise
 	if (courseIndex !== null) return courseIndex;
 	
 	const fetchToUse = fetchFn || fetch;
-	// During prerendering, use file:// URLs to access static files
-	const baseUrl = browser ? base : '';
-	const response = await fetchToUse(`${baseUrl}/course_index.json`);
+	
+	// Build proper URL for different environments
+	let url;
+	if (browser) {
+		url = `${base}/course_index.json`;
+	} else {
+		// During SSR/prerendering, use file:// URL
+		const fs = await import('fs');
+		const path = await import('path');
+		const filePath = path.join(process.cwd(), 'static', 'course_index.json');
+		const data = fs.readFileSync(filePath, 'utf-8');
+		courseIndex = JSON.parse(data);
+		return courseIndex!;
+	}
+	
+	const response = await fetchToUse(url);
 	if (!response.ok) throw new Error(`Failed to load course index: ${response.status}`);
 	courseIndex = await response.json();
 	return courseIndex!; // Non-null assertion since we just assigned it
@@ -43,9 +56,22 @@ export async function getMajorIndex(fetchFn?: typeof globalThis.fetch): Promise<
 	if (majorIndex !== null) return majorIndex;
 	
 	const fetchToUse = fetchFn || fetch;
-	// During prerendering, use file:// URLs to access static files
-	const baseUrl = browser ? base : '';
-	const response = await fetchToUse(`${baseUrl}/major_index.json`);
+	
+	// Build proper URL for different environments
+	let url;
+	if (browser) {
+		url = `${base}/major_index.json`;
+	} else {
+		// During SSR/prerendering, use direct file access
+		const fs = await import('fs');
+		const path = await import('path');
+		const filePath = path.join(process.cwd(), 'static', 'major_index.json');
+		const data = fs.readFileSync(filePath, 'utf-8');
+		majorIndex = JSON.parse(data);
+		return majorIndex!;
+	}
+	
+	const response = await fetchToUse(url);
 	if (!response.ok) throw new Error(`Failed to load major index: ${response.status}`);
 	majorIndex = await response.json();
 	return majorIndex!; // Non-null assertion since we just assigned it
@@ -68,20 +94,25 @@ export async function getSubjectCourses(subjectCode: string, fetchFn?: typeof gl
 	}
 	
 	const fetchToUse = fetchFn || fetch;
-	// Don't URL encode the filename for static file serving
-	// The Vite dev server expects the actual filename, not URL-encoded
 	
-	// During prerendering, use file:// URLs to access static files
-	const baseUrl = browser ? base : '';
-	const url = `${baseUrl}/courses/${subjectCode}.json`;
-	const response = await fetchToUse(url);
-	
-	if (!response.ok) {
-		console.error(`Failed to fetch courses for subject ${subjectCode}: ${response.status} ${response.statusText}`);
-		throw new Error(`Subject ${subjectCode} not found: ${response.status}`);
+	// Build proper URL for different environments
+	let courses: Course[];
+	if (browser) {
+		const url = `${base}/courses/${subjectCode}.json`;
+		const response = await fetchToUse(url);
+		if (!response.ok) {
+			console.error(`Failed to fetch courses for subject ${subjectCode}: ${response.status} ${response.statusText}`);
+			throw new Error(`Subject ${subjectCode} not found: ${response.status}`);
+		}
+		courses = await response.json();
+	} else {
+		// During SSR/prerendering, use direct file access
+		const fs = await import('fs');
+		const path = await import('path');
+		const filePath = path.join(process.cwd(), 'static', 'courses', `${subjectCode}.json`);
+		const data = fs.readFileSync(filePath, 'utf-8');
+		courses = JSON.parse(data);
 	}
-
-	const courses: Course[] = await response.json();
 	subjectCourses.set(subjectCode, courses);
 	return courses;
 }
@@ -107,20 +138,38 @@ export async function getMajorByName(majorName: string, fetchFn?: typeof globalT
 	}
 	
 	const fetchToUse = fetchFn || fetch;
-	// URL encode the major name to handle spaces and special characters
-	const encodedMajorName = encodeURIComponent(majorName);
-	// During prerendering, use file:// URLs to access static files
-	const baseUrl = browser ? base : '';
-	const response = await fetchToUse(`${baseUrl}/majors/${encodedMajorName}.json`);
 	
-	if (!response.ok) {
-		if (response.status === 404) {
-			return undefined; // Return undefined for missing majors instead of throwing
+	// Build proper URL for different environments
+	let major: Major;
+	if (browser) {
+		// URL encode the major name for the URL
+		const encodedMajorName = encodeURIComponent(majorName);
+		const url = `${base}/majors/${encodedMajorName}.json`;
+		const response = await fetchToUse(url);
+		if (!response.ok) {
+			if (response.status === 404) {
+				return undefined; // Return undefined for missing majors instead of throwing
+			}
+			throw new Error(`Failed to load major ${majorName}: ${response.status}`);
 		}
-		throw new Error(`Failed to load major ${majorName}: ${response.status}`);
+		major = await response.json();
+	} else {
+		// During SSR/prerendering, use direct file access with the exact filename
+		try {
+			const fs = await import('fs');
+			const path = await import('path');
+			// Use the exact major name as the filename (no URL encoding needed for file system)
+			const filePath = path.join(process.cwd(), 'static', 'majors', `${majorName}.json`);
+			const data = fs.readFileSync(filePath, 'utf-8');
+			major = JSON.parse(data);
+		} catch (err: any) {
+			if (err.code === 'ENOENT') {
+				return undefined; // Return undefined for missing majors instead of throwing
+			}
+			throw new Error(`Failed to load major ${majorName}: ${err.message}`);
+		}
 	}
 	
-	const major: Major = await response.json();
 	majors.set(majorName, major);
 	return major;
 }
